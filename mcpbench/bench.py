@@ -1,7 +1,7 @@
 import asyncio
 from mcpbench.runner import run_scenario, ScenarioResult
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 class MCPBench:

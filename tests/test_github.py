@@ -1,7 +1,7 @@
 from mcpbench import MCPBench, expect
 from tests.github_server import transport
 
-bench = MCPBench(server=transport, model="claude-sonnet-4-20250514")
+bench = MCPBench(server=transport, model="claude-sonnet-4-6")
 
 
 @bench.scenario("search for open issues in a repo")

@@ -29,7 +29,7 @@ You'll need an `ANTHROPIC_API_KEY` environment variable set for all runs. The `-
 from mcpbench import MCPBench, expect
 from myapp.server import mcp  # your FastMCP server
 
-bench = MCPBench(server=mcp, model="claude-sonnet-4-20250514")
+bench = MCPBench(server=mcp, model="claude-sonnet-4-6")
 
 @bench.scenario("user wants to search by name")
 async def test_search():
@@ -94,8 +94,55 @@ When a scenario falls below threshold, `--diagnose` sends both tool descriptions
 | `--runs N` | 5 | Number of times to run each scenario |
 | `--threshold F` | 0.8 | Minimum hit rate to pass (0.0–1.0) |
 | `--diagnose` | off | Call Claude to explain and suggest fixes for failures |
+| `--save PATH` | — | Write results to a JSON snapshot file |
+| `--force` | off | Overwrite an existing snapshot file |
 
 Exit code is `1` if any scenario is below threshold — useful for CI.
+
+---
+
+## Saving snapshots and diffing
+
+Once you've edited your tool descriptions, you can compare results before and after with `mcpbench diff`.
+
+**Save a baseline:**
+
+```bash
+mcpbench run tests/test_myserver.py --runs 10 --save results/v1.json
+```
+
+**Edit your tool descriptions, then save a new snapshot:**
+
+```bash
+mcpbench run tests/test_myserver.py --runs 10 --save results/v2.json
+```
+
+**Compare them:**
+
+```bash
+mcpbench diff results/v1.json results/v2.json
+```
+
+```
+Comparing v1.json → v2.json
+model: claude-sonnet-4-6  runs: 10
+
+  scenario                          before  after   delta
+  ─────────────────────────────────────────────────────────
+✓ user wants to search by name       80%    100%    +20%
+✗ user wants a specific record       60%     40%    -20%  ← regressed
+  list open issues in a repo        100%    100%       —
+
+1 scenario regressed.
+```
+
+Exit code is `1` if any scenario regressed — safe to run in CI. Comparison is keyed on scenario name, not position, so reordering scenarios doesn't produce false regressions.
+
+The default regression threshold is a 5% hit-rate drop. Adjust it with `--regression-threshold`:
+
+```bash
+mcpbench diff results/v1.json results/v2.json --regression-threshold 0.1
+```
 
 ---
 
@@ -128,7 +175,7 @@ transport = StdioTransport(
 from mcpbench import MCPBench, expect
 from tests.github_server import transport
 
-bench = MCPBench(server=transport, model="claude-sonnet-4-20250514")
+bench = MCPBench(server=transport, model="claude-sonnet-4-6")
 
 @bench.scenario("search for open issues in a repo")
 async def test_search_issues():
@@ -204,7 +251,7 @@ A prompt that sits at 60% true hit rate will sometimes score 100% and sometimes 
 Contributions are welcome. Here's how to get started:
 
 ```bash
-git clone https://github.com/elanukarakus/mcp-bench
+git clone https://github.com/elnukk/mcpbench
 cd mcp-bench
 pip install -e .
 ```
@@ -212,14 +259,14 @@ pip install -e .
 **Good first contributions:**
 - Add support for testing against HTTP/SSE MCP servers (currently only stdio is documented)
 - Add a `--model` flag to the CLI so you can benchmark against different Claude models without editing the test file
-- Add JSON/CSV output format for CI reporting
+- Add CSV output format for snapshot data
 - Write test scenarios for other popular MCP servers (Slack, Linear, Notion, etc.)
 
-**Bigger ideas (v3+):**
+**Bigger ideas:**
 - Multi-model comparison — run the same scenarios against Claude and GPT-4o and diff the results
 - Parallel runs — run N Claude calls concurrently instead of sequentially to speed up large benchmarks
 - Statistical confidence intervals — tell you when N is too small to trust the hit rate
-- GitHub Actions template — drop-in workflow for running mcpbench on every PR
+- GitHub Actions template — drop-in workflow for running mcpbench and saving snapshots on every PR
 
 **To submit a PR:**
 1. Fork the repo and create a branch
