@@ -1,7 +1,8 @@
 {
   "agent-elanuk-41604": {
     "files": [
-      "../.claude/plans/playful-wishing-lark.md"
+      "../.claude/plans/playful-wishing-lark.md",
+      "mcpbench/stats.py"
     ],
     "owner": "elanuk",
     "started": 1787499185,
