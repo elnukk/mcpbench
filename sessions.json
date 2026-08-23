@@ -4,7 +4,8 @@
       "../.claude/plans/playful-wishing-lark.md",
       "mcpbench/stats.py",
       "mcpbench/diff.py",
-      "mcpbench/cli.py"
+      "mcpbench/cli.py",
+      "tests/test_stats.py"
     ],
     "owner": "elanuk",
     "started": 1787499185,
