@@ -1,6 +1,8 @@
 {
   "agent-elanuk-41604": {
-    "files": [],
+    "files": [
+      "../.claude/plans/playful-wishing-lark.md"
+    ],
     "owner": "elanuk",
     "started": 1787499185,
     "expires": 1787500085,
