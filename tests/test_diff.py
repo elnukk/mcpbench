@@ -112,6 +112,63 @@ def test_keyed_by_name_not_position():
     assert not result.regressions
 
 
+def test_significant_regression_has_non_overlapping_ci():
+    # large N, big drop -> CIs shouldn't overlap
+    before = _snapshot([{"name": "search users", "hit_rate": 0.9}], runs=50)
+    after = _snapshot([{"name": "search users", "hit_rate": 0.3}], runs=50)
+    result = compute_diff(before, after)
+    assert result.diffs[0].status == "regressed"
+    assert result.diffs[0].significant
+
+
+def test_small_n_regression_may_not_be_significant():
+    # n=5, single-run swing crossing the threshold -> CIs should still overlap
+    before = _snapshot([{"name": "search users", "hit_rate": 0.8}], runs=5)
+    after = _snapshot([{"name": "search users", "hit_rate": 0.4}], runs=5)
+    result = compute_diff(before, after)
+    assert result.diffs[0].status == "regressed"
+    assert not result.diffs[0].significant
+
+
+def test_cost_note_flagged_when_accuracy_unchanged():
+    before = _snapshot([{"name": "search users", "hit_rate": 0.8}])
+    after = _snapshot([{"name": "search users", "hit_rate": 0.8}])
+    before.scenarios[0].total_input_tokens = 100
+    before.scenarios[0].total_output_tokens = 20
+    before.scenarios[0].avg_latency_s = 0.5
+    after.scenarios[0].total_input_tokens = 300
+    after.scenarios[0].total_output_tokens = 20
+    after.scenarios[0].avg_latency_s = 0.9
+    result = compute_diff(before, after)
+    assert result.diffs[0].status == "unchanged"
+    assert "tokens" in result.diffs[0].cost_note
+    assert "latency" in result.diffs[0].cost_note
+
+
+def test_cost_note_absent_when_change_is_small():
+    before = _snapshot([{"name": "search users", "hit_rate": 0.8}])
+    after = _snapshot([{"name": "search users", "hit_rate": 0.8}])
+    before.scenarios[0].total_input_tokens = 100
+    before.scenarios[0].total_output_tokens = 20
+    before.scenarios[0].avg_latency_s = 0.5
+    after.scenarios[0].total_input_tokens = 105
+    after.scenarios[0].total_output_tokens = 21
+    after.scenarios[0].avg_latency_s = 0.52
+    result = compute_diff(before, after)
+    assert result.diffs[0].cost_note is None
+
+
+def test_added_removed_rows_are_trivially_significant():
+    before = _snapshot([{"name": "search users", "hit_rate": 1.0}])
+    after = _snapshot([
+        {"name": "search users", "hit_rate": 1.0},
+        {"name": "get user by id", "hit_rate": 0.6},
+    ])
+    result = compute_diff(before, after)
+    added = [d for d in result.diffs if d.status == "added"][0]
+    assert added.significant
+
+
 def test_custom_regression_threshold():
     before = _snapshot([{"name": "search users", "hit_rate": 0.8}])
     after = _snapshot([{"name": "search users", "hit_rate": 0.72}])
@@ -192,6 +249,49 @@ def test_to_json_from_json_roundtrip(tmp_path):
     assert s.tool_calls == {"get_user": 2, "list_users": 1}
 
 
+def test_build_computes_cost_aggregates():
+    result = ScenarioResult(prompt="find john", expected_tool="search_users")
+    result.runs = [
+        ToolCall(tool_called="search_users", params={}, input_tokens=100, output_tokens=20, latency_s=0.4),
+        ToolCall(tool_called="search_users", params={}, input_tokens=110, output_tokens=25, latency_s=0.6),
+    ]
+    snap = BenchSnapshot.build(
+        model="claude-sonnet-4-20250514",
+        runs_per_scenario=2,
+        scenario_results=[("search scenario", result)],
+    )
+    s = snap.scenarios[0]
+    assert s.total_input_tokens == 210
+    assert s.total_output_tokens == 45
+    assert s.avg_latency_s == pytest.approx(0.5)
+
+
+def test_from_json_backward_compat_missing_cost_fields(tmp_path):
+    # Older snapshot files won't have avg_latency_s/total_input_tokens/total_output_tokens.
+    path = tmp_path / "old_snap.json"
+    path.write_text(json.dumps({
+        "mcpbench_version": "0.3.0",
+        "created_at": "2025-05-31T00:00:00Z",
+        "model": "claude-sonnet-4-6",
+        "runs_per_scenario": 5,
+        "scenarios": [
+            {
+                "name": "search users",
+                "expected_tool": "search_users",
+                "hit_rate": 0.8,
+                "hits": 4,
+                "total": 5,
+                "tool_calls": {"search_users": 4},
+            }
+        ],
+    }))
+    loaded = BenchSnapshot.from_json(path)
+    s = loaded.scenarios[0]
+    assert s.avg_latency_s == 0.0
+    assert s.total_input_tokens == 0
+    assert s.total_output_tokens == 0
+
+
 def test_to_json_schema(tmp_path):
     result = _make_result("find john", "search_users", ["search_users"])
     snap = BenchSnapshot.build("claude-sonnet-4-20250514", 1, [("s", result)])
@@ -205,7 +305,10 @@ def test_to_json_schema(tmp_path):
     assert "runs_per_scenario" in data
     assert isinstance(data["scenarios"], list)
     s = data["scenarios"][0]
-    for key in ("name", "expected_tool", "hit_rate", "hits", "total", "tool_calls"):
+    for key in (
+        "name", "expected_tool", "hit_rate", "hits", "total", "tool_calls",
+        "avg_latency_s", "total_input_tokens", "total_output_tokens",
+    ):
         assert key in s, f"missing key: {key}"
 
 

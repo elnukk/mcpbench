@@ -11,5 +11,11 @@ version = "0.3.0"
 description = "Benchmark tool-calling reliability for MCP servers"
 dependencies = ["anthropic", "fastmcp>=2.0.0,<3.0.0", "click"]
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
 [project.scripts]
 mcpbench = "mcpbench.cli:cli"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

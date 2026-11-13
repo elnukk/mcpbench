@@ -18,6 +18,9 @@ class ScenarioSnapshot:
     hits: int
     total: int
     tool_calls: dict[str, int]
+    avg_latency_s: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
 
 @dataclass
@@ -44,6 +47,9 @@ class BenchSnapshot:
                     "hits": s.hits,
                     "total": s.total,
                     "tool_calls": s.tool_calls,
+                    "avg_latency_s": s.avg_latency_s,
+                    "total_input_tokens": s.total_input_tokens,
+                    "total_output_tokens": s.total_output_tokens,
                 }
                 for s in self.scenarios
             ],
@@ -61,6 +67,9 @@ class BenchSnapshot:
                 hits=s["hits"],
                 total=s["total"],
                 tool_calls=s.get("tool_calls", {}),
+                avg_latency_s=s.get("avg_latency_s", 0.0),
+                total_input_tokens=s.get("total_input_tokens", 0),
+                total_output_tokens=s.get("total_output_tokens", 0),
             )
             for s in data.get("scenarios", [])
         ]
@@ -91,6 +100,9 @@ class BenchSnapshot:
                 hits=hits,
                 total=n,
                 tool_calls=dict(result.confusion),
+                avg_latency_s=result.avg_latency_s,
+                total_input_tokens=result.total_input_tokens,
+                total_output_tokens=result.total_output_tokens,
             ))
         return cls(
             mcpbench_version=MCPBENCH_VERSION,

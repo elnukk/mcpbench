@@ -5,10 +5,11 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 class MCPBench:
-    def __init__(self, server, model: str = DEFAULT_MODEL, runs: int = 5):
+    def __init__(self, server, model: str = DEFAULT_MODEL, runs: int = 5, concurrency: int = 5):
         self.server = server
         self.model = model
         self.runs = runs
+        self.concurrency = concurrency
         self._scenarios: list[dict] = []
         self._last_result: ScenarioResult | None = None
 
@@ -25,6 +26,7 @@ class MCPBench:
             n=self.runs,
             model=self.model,
             expected_tool=expected_tool,
+            concurrency=self.concurrency,
         )
         self._last_result = result
         return result

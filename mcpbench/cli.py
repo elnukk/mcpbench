@@ -8,6 +8,7 @@ from mcpbench.runner import ScenarioResult
 from mcpbench.diagnosis import diagnose
 from mcpbench.snapshot import BenchSnapshot
 from mcpbench.diff import compute_diff
+from mcpbench.stats import wilson_interval
 
 
 def _load_bench(path: str) -> MCPBench:
@@ -39,9 +40,16 @@ def _print_results(
     rate = hits / n
     bar = "█" * hits + "░" * (n - hits)
     passed = rate >= threshold
+    ci_lo, ci_hi = wilson_interval(hits, n)
 
     mark = "✓" if passed else "✗"
-    click.echo(f"{mark} {description:<45} {bar}  {hits}/{n}  ({rate:.0%})")
+    click.echo(
+        f"{mark} {description:<45} {bar}  {hits}/{n}  ({rate:.0%}, 95% CI {ci_lo:.0%}–{ci_hi:.0%})"
+    )
+    avg_tokens = (result.total_input_tokens + result.total_output_tokens) / n
+    click.echo(
+        f"    avg {result.avg_latency_s:.2f}s/call · {avg_tokens:.0f} tokens/call"
+    )
 
     if not passed:
         click.echo(f"  ← below threshold ({threshold:.0%})")
@@ -101,17 +109,19 @@ def cli():
 @cli.command()
 @click.argument("path")
 @click.option("--runs", default=5, show_default=True, help="Number of times to run each scenario")
+@click.option("--concurrency", default=5, show_default=True, help="Max concurrent Claude calls per scenario")
 @click.option("--threshold", default=0.8, show_default=True, help="Minimum hit rate to pass")
 @click.option("--diagnose", "run_diagnose", is_flag=True, default=False, help="Diagnose failing scenarios with Claude")
 @click.option("--save", "save_path", default=None, help="Write results to a snapshot JSON file")
 @click.option("--force", is_flag=True, default=False, help="Overwrite existing snapshot file")
-def run(path: str, runs: int, threshold: float, run_diagnose: bool, save_path: str | None, force: bool):
+def run(path: str, runs: int, concurrency: int, threshold: float, run_diagnose: bool, save_path: str | None, force: bool):
     """Run mcpbench scenarios from a test file."""
     if save_path and not force and Path(save_path).exists():
         raise click.ClickException(f"{save_path} already exists. Use --force to overwrite.")
 
     bench = _load_bench(path)
     bench.runs = runs
+    bench.concurrency = concurrency
 
     click.echo(f"\nRunning {len(bench._scenarios)} scenario(s) × {runs} runs each...\n")
 
@@ -181,7 +191,12 @@ def diff_cmd(before_path: str, after_path: str, regression_threshold: float):
             delta_str = f"{d.delta:+.0%}"
 
         suffix = "  ← regressed" if d.status == "regressed" else ""
+        if d.status in ("regressed", "improved") and not d.significant:
+            suffix += "  (not stat. significant at this n)"
         click.echo(f"{mark} {d.name:<{col_w}} {before_str:>6}  {after_str:>6}  {delta_str:>6}{suffix}")
+
+        if d.status == "unchanged" and d.cost_note:
+            click.echo(f"    ⚠ {d.cost_note} (accuracy unchanged)")
 
     regression_count = len(result.regressions)
     click.echo()

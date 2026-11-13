@@ -16,6 +16,27 @@ class Expect:
             )
         return self
 
+    def abstained(self) -> "Expect":
+        """Assert the model called no tool on most runs (a restraint scenario)."""
+        most_common = max(self.result.confusion, key=self.result.confusion.get, default=None)
+        if most_common != "(no tool)":
+            total = len(self.result.runs)
+            no_tool_count = self.result.confusion.get("(no tool)", 0)
+            raise AssertionError(
+                f"Expected no tool call (got {most_common} "
+                f"{self.result.confusion.get(most_common, 0)}/{total} times, "
+                f"abstained only {no_tool_count}/{total} times)"
+            )
+        return self
+
+    def did_not_call_tool(self, name: str) -> "Expect":
+        """Assert a specific (distractor) tool was never called, regardless of expected_tool."""
+        count = self.result.confusion.get(name, 0)
+        total = len(self.result.runs)
+        if count > 0:
+            raise AssertionError(f"Expected {name!r} to never be called, but it was called {count}/{total} times")
+        return self
+
     def tool_param(self, key: str, contains: str | None = None, equals=None) -> "Expect":
         successful = [r for r in self.result.runs if r.tool_called == self.result.expected_tool]
         if not successful:
